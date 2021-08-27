@@ -1,0 +1,384 @@
+
+#include <DallasTemperature.h>
+#include <OneWire.h>
+//SONDA TEMPERATURA
+//DQ-->43
+#include <DHT.h>
+#include <DHT_U.h>
+// CONNECTIONS DHT:
+// DHT DATOS--> 7
+#include <Wire.h> 
+#include <LiquidCrystal_I2C.h>
+// CONNECTIONS LCD:
+// SDA-->20
+// SCL-->21
+#include <ThreeWire.h>  
+#include <RtcDS1302.h>
+
+// CONNECTIONS RTC:
+// DS1302 CLK/SCLK --> 5
+// DS1302 DAT/IO --> 8
+// DS1302 RST/CE --> 2
+// DS1302 VCC --> 3.3v - 5v
+// DS1302 GND --> GND
+
+#include <SPI.h>
+#include <SD.h>
+ // SD CONNEXIONS SPI bus as follows:
+ //** MOSI - pin 51
+ //** MISO - pin 50
+ //** sck - pin 52
+ //** CS - pin 53 
+ //PONTEJAR PINS 5V I 3.3V DE LA PLACA TARGETA
+File myFile;//de la SD
+
+// Pin on es connecta el bus SPI de la SD
+const int chipSelect = 53; 
+// Pin on es connecta el bus 1-Wire
+const int pinDatosDQ = 43;
+
+ThreeWire myWire(8,5,2); // IO, SCLK, CE
+RtcDS1302<ThreeWire> Rtc(myWire);
+// Definimos el pin digital donde se conecta el sensor
+#define DHTPIN 7
+// Dependiendo del tipo de sensor
+#define DHTTYPE DHT11
+// Inicializamos el sensor DHT11
+DHT dht(DHTPIN, DHTTYPE);
+// Set the LCD address to 0x27 for a 16 chars and 2 line display
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+// Instancia a las clases OneWire y DallasTemperature
+OneWire oneWireObjeto(pinDatosDQ);
+DallasTemperature sensorDS18B20(&oneWireObjeto);
+
+//variables
+char data[20];
+float h;
+float t;
+float f;
+float tsump;
+float tacuari;
+
+void setup()
+{ 
+  Serial.begin(9600);
+  
+  Serial.print("Programa carregat ");
+  Serial.print(__DATE__);
+  Serial.print(" ");
+  Serial.println(__TIME__); 
+  while (!Serial) {
+    ; // wait for serial port to connect. Needed for native USB port only
+  }
+ 
+// Iniciamos el bus 1-Wire
+    sensorDS18B20.begin();
+//Iniciamos el relog
+  Rtc.Begin();
+  
+//Iniciamos la SD
+  SD.begin();
+//Iniciamos el sensor humedad
+  dht.begin();
+// Iniciamos el LCD
+  lcd.init();
+  lcd.clear();
+
+  // Turn on the blacklight
+  lcd.backlight();
+
+  delay(1000);
+  lcd.backlight();
+  
+  pinMode(36, OUTPUT);
+  pinMode(37, OUTPUT);
+  pinMode(38, OUTPUT);
+  pinMode(39, OUTPUT);
+  pinMode(53, OUTPUT);//pin cs de la sd es configura com a sortida
+ 
+ Serial.println("Iniciant targeta SD...");
+
+  if (!SD.begin()) {
+    Serial.println("No s'ha pogut arrancar");
+    while (1);
+  }
+  Serial.println("Targeta ok");  
+  //comprovem si Dades.txt esta a la SD
+if (SD.exists("Dades.txt")) {
+    Serial.println("Dades.txt ja esta creat.");
+  } else {
+    Serial.println("Dades.txt no esta creat.");
+    //Crear archiu Dades.txt
+    myFile = SD.open("Dades.txt", FILE_WRITE);
+    myFile.close();
+    Serial.println("S'ha creat l'archiu Dades.txt");
+  }
+  //comprovem si Alarmess.txt esta a la SD
+if (SD.exists("Alarmes.txt")) {
+    Serial.println("Alarmes.txt ja esta creat.");
+  } else {
+    Serial.println("Alarmes.txt no esta creat.");
+    //Crear archiu Dades.txt
+    myFile = SD.open("Alarmes.txt", FILE_WRITE);
+    myFile.close();
+    Serial.println("Alarmes.txt s'ha creat.");
+  }
+  /*implement verifica hora PC-Arduino
+ RtcDateTime compiled = RtcDateTime(__DATE__, __TIME__);
+    printDateTime(compiled);
+    Serial.println();
+    
+    if (!Rtc.IsDateTimeValid()) 
+    {
+        // Common Causes:
+        //    1) first time you ran and the device wasn't running yet
+        //    2) the battery on the device is low or even missing
+
+        Serial.println("RTC lost confidence in the DateTime!");
+        Rtc.SetDateTime(compiled);
+    }
+
+    if (Rtc.GetIsWriteProtected())
+    {
+        Serial.println("RTC was write protected, enabling writing now");
+        Rtc.SetIsWriteProtected(false);
+    }
+
+   if (!Rtc.GetIsRunning())
+    {
+        Serial.println("RTC was not actively running, starting now");
+        Rtc.SetIsRunning(true);
+    }
+
+    RtcDateTime now = Rtc.GetDateTime();
+   if (now < compiled) 
+    {
+       Serial.println("RTC is older than compile time!  (Updating DateTime)");
+      Rtc.SetDateTime(compiled);
+    }
+  else if (now > compiled) 
+    {
+     Serial.println("RTC is newer than compile time. (this is expected)");
+    }
+    else if (now == compiled) 
+    {
+       Serial.println("RTC is the same as compile time! (not expected but all is fine)");
+    }
+*/
+ 
+ 
+}
+
+void loop()
+{
+   digitalWrite(36, LOW);   // Engegar LED (HIGH es engegat i LOW parat)
+   digitalWrite(37, LOW);   // Engegar LED (HIGH es engegat i LOW parat)
+   digitalWrite(38, LOW);   // Engegar LED (HIGH es engegat i LOW parat)
+   digitalWrite(39, LOW);   // Engegar LED (HIGH es engegat i LOW parat)
+   delay(1000);              // Esperar un segon
+  
+   //Data i hora
+    RtcDateTime now = Rtc.GetDateTime();
+    printDateTime(now);
+    Serial.println();
+    delay(5000);
+     
+
+if (!now.IsValid())
+    {
+        // Common Causes:
+        //    1) La bateria del dispositiu és baixa o fins i tot falta, ho la línia elèctrica s'ha desconnectat
+        Serial.println("Revisar el RTC, algo no funciona");
+    }
+    
+       // Esperamos 5 segundos entre medidas
+  delay(5000);
+comprovarsump();
+delay(5000);
+
+comprovartemperatura();
+delay(5000);
+ 
+guardardades();
+delay(1000);    
+}
+
+void printDateTime(const RtcDateTime& dt)
+{
+  
+   { 
+      snprintf_P(data, 
+            sizeof(data),
+            PSTR("%02u/%02u/%04u %02u:%02u"),
+            dt.Day(),
+            dt.Month(),
+            dt.Year(),
+            dt.Hour(),
+            dt.Minute()
+            );
+    Serial.print(data); 
+    lcd.setCursor(0,0);
+    lcd.print(data); 
+    
+    
+    }
+  
+}
+
+void comprovarsump()
+  
+   { 
+    // Leemos la humedad relativa
+    h = dht.readHumidity();
+    // Leemos la temperatura en grados centígrados (por defecto)
+    t = dht.readTemperature();
+    // Leemos la temperatura en grados Fahrenheit
+    f = dht.readTemperature(true);
+
+ 
+  // Comprobamos si ha habido algún error en la lectura
+  if (isnan(h) || isnan(t) || isnan(f)) {
+    Serial.println("Error obteniendo los datos del sensor DHT11");
+    return;
+  }
+ /* Calcular el índice de calor en Fahrenheit
+ float hif = dht.computeHeatIndex(f, h);
+   Calcular el índice de calor en grados centígrados
+  float hic = dht.computeHeatIndex(t, h, false);*/
+ 
+  Serial.print("Humedad: ");
+  Serial.print(h);
+  lcd.setCursor(0,1);
+  lcd.print("                ");//borrar datos on escriurem
+  lcd.setCursor(0,1);
+  lcd.print(h);
+  lcd.print("% ");
+  Serial.print(" %\t");
+  Serial.print("Temperatura: ");
+  Serial.print(t);
+  Serial.print(" ºC ");
+  lcd.print(t);
+  lcd.print("C");
+  Serial.print(f);
+  Serial.println(" ºF\t");
+  //Serial.print("Índice de calor: ");
+  //Serial.print(hic);
+  //Serial.print(" *C ");
+  //Serial.print(hif);
+  //Serial.println(" *F");
+  delay(2000);
+
+    
+delay(5000);
+    
+    
+    }
+void comprovartemperatura()
+{
+    // Mandamos comandos para toma de temperatura a los sensores
+    // Mandando comandos a los sensores;
+    sensorDS18B20.requestTemperatures();
+    tsump = sensorDS18B20.getTempCByIndex(0);
+    tacuari = sensorDS18B20.getTempCByIndex(1);
+    // Leemos y mostramos los datos de los sensores DS18B20
+    Serial.print("Temperatura sensor Sump(0): ");
+    Serial.print(tsump);
+    Serial.println(" C");
+    lcd.setCursor(0,1);
+    lcd.print("                ");//borrar datos on escriurem
+    lcd.setCursor(0,1);
+    lcd.print("Sump    ");
+    lcd.print(tsump);
+    lcd.print("C");
+   
+    delay(5000);
+    Serial.print("Temperatura sensor Acuari(1): ");
+    Serial.print(tacuari);
+    Serial.println(" C");
+    lcd.setCursor(0,1);
+    lcd.print("                ");//borrar datos on escriurem
+    lcd.setCursor(0,1);
+    lcd.print("Acuari  ");
+    lcd.print(tacuari);
+    lcd.print("C");
+
+    
+    if (tsump<25 || tacuari<25) 
+    {
+    Serial.println("temperatura baixa");
+    lcd.setCursor(0,1);
+    lcd.print("                ");//borrar datos on escriurem;
+    lcd.setCursor(0,1);
+    lcd.print("temp. baixa");
+    guardaralarma("Temp baixa");
+     digitalWrite(36, HIGH);   // turn the LED on (HIGH is the voltage level)
+    } 
+    else if (tsump>29 || tacuari>29) 
+    {
+    Serial.println("temperatura alta");
+    lcd.setCursor(0,1);
+    lcd.print("                ");//borrar datos on escriurem;
+    lcd.setCursor(0,1);
+    lcd.print("temp. alta");
+    guardaralarma("Temp alta");
+     digitalWrite(38, HIGH);   // turn the LED on (HIGH is the voltage level)
+    } 
+    else if (tsump>25 || tacuari>25) 
+    {
+    Serial.println("temperatura bona");
+    /*lcd.setCursor(0,1);
+    lcd.print("                ");//borrar datos on escriurem;
+    lcd.setCursor(0,1);
+    lcd.print("temp. bona");*/
+    
+    digitalWrite(37, HIGH);   // turn the LED on (HIGH is the voltage level)
+    }
+}
+
+void guardardades()
+{
+   
+  myFile = SD.open("Dades.txt", FILE_WRITE); 
+  // si el fitxer s'ha obert bé, escriu-li:
+  if (myFile) {
+    Serial.println("Guardar dades.");
+    myFile.print(data);
+    myFile.print(",");
+    myFile.print(h);
+    myFile.print(",");
+    myFile.print(t);
+    myFile.print(",");
+    myFile.print(tsump);
+    myFile.print(",");
+    myFile.println(tacuari);
+    // close the file:
+    myFile.close();
+  
+  } 
+  else {
+    // if the file didn't open, print an error:
+    Serial.println("error al guardar dades");
+  }
+}
+
+void guardaralarma(String alarma)
+{
+
+myFile = SD.open("Alarmes.txt", FILE_WRITE); 
+  // si el fitxer s'ha obert bé, escriu-li:
+  if (myFile) {
+    Serial.println("Guardar alarma.");
+    myFile.print(data);
+    myFile.print(",");
+    myFile.println(alarma);
+    // close the file:
+    myFile.close();
+    } 
+  else {
+    // if the file didn't open, print an error:
+    Serial.println("error al guardar alarma");
+       }
+}
+
+
+ 
